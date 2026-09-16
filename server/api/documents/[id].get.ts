@@ -20,6 +20,9 @@ export default defineEventHandler(async (event) => {
       documentDate: documents.documentDate,
       uploadedAt: documents.uploadedAt,
       createdBy: documents.createdBy,
+      ocrText: documents.ocrText,
+      hasPreview: documents.previewStorageKey,
+      hasSearchablePdf: documents.searchablePdfStorageKey,
     })
     .from(documents)
     .where(eq(documents.id, id))
@@ -29,5 +32,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Document not found' })
   }
 
-  return document
+  return {
+    ...document,
+    hasPreview: document.hasPreview !== null,
+    hasSearchablePdf: document.hasSearchablePdf !== null,
+  }
 })

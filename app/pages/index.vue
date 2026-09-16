@@ -143,7 +143,9 @@ function formatDate(iso: string): string {
           </td>
           <td>{{ formatDate(doc.uploadedAt) }}</td>
           <td>
-            <a :href="`/api/documents/${doc.id}/original`" target="_blank" rel="noopener">View</a>
+            <NuxtLink :to="`/documents/${doc.id}`">
+              View
+            </NuxtLink>
           </td>
         </tr>
       </tbody>

@@ -4,6 +4,7 @@ import { documents } from '../../../db/schema'
 import { sha256Hex } from '../../services/documents/checksum'
 import { UploadValidationError, validateUpload } from '../../services/documents/validate-upload'
 import { useDocumentStorage } from '../../services/storage'
+import { enqueueDocumentProcessing } from '../../services/jobs/queue'
 import { MAX_UPLOAD_BYTES } from '../../../shared/schemas/upload'
 
 const POSTGRES_UNIQUE_VIOLATION = '23505'
@@ -83,6 +84,19 @@ export default defineEventHandler(async (event) => {
     }
 
     logger.info('Document uploaded', { documentId: inserted.id })
+
+    try {
+      await enqueueDocumentProcessing(inserted.id)
+    }
+    catch (error) {
+      // The document is safely stored either way; it just won't be
+      // processed until it's manually re-queued or the queue recovers.
+      logger.error('Failed to enqueue document processing', {
+        documentId: inserted.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+
     return {
       status: 'uploaded' as const,
       documentId: inserted.id,

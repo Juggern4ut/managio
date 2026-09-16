@@ -10,17 +10,22 @@
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "nuxt typecheck",
+    "typecheck": "nuxt typecheck && tsc --noEmit -p tsconfig.worker.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "auth:hash": "tsx scripts/hash-password.ts"
+    "auth:hash": "tsx scripts/hash-password.ts",
+    "worker:dev": "tsx watch worker/index.ts",
+    "worker:start": "tsx worker/index.ts"
   },
   "dependencies": {
+    "bullmq": "^6.3.6",
     "consola": "^3.4.2",
+    "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
+    "ioredis": "^5.11.1",
     "nuxt": "^4.5.2",
     "nuxt-auth-utils": "^0.5.30",
     "pg": "^8.23.0",
@@ -31,6 +36,7 @@
   "devDependencies": {
     "@nuxt/eslint": "^1.17.0",
     "@nuxt/test-utils": "^4.3.2",
+    "@types/node": "^26.6.1",
     "@types/pg": "^8.23.1",
     "@vue/test-utils": "^2.5.1",
     "drizzle-kit": "^0.31.10",

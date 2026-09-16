@@ -6,13 +6,15 @@ export default defineNuxtConfig({
   modules: ['@nuxt/eslint', 'nuxt-auth-utils'],
 
   runtimeConfig: {
-    // `DATABASE_URL` (no NUXT_ prefix) is the convention drizzle-kit's CLI
-    // also reads, so both the app and migrations share one env var name.
+    // These env var names have no NUXT_ prefix on purpose: drizzle-kit's CLI
+    // and the standalone worker process read them too, so app/worker/tooling
+    // share one set of names instead of three.
     databaseUrl: process.env.DATABASE_URL || '',
+    storageDir: process.env.STORAGE_DIR || './data/documents',
+    redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
     authUsername: '',
     authPasswordHash: '',
     logFormat: 'pretty',
-    storageDir: './data/documents',
   },
 
   nitro: {
