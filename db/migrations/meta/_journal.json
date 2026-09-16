@@ -36,6 +36,13 @@
       "when": 1789569273636,
       "tag": "0004_cool_jack_power",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789579361950,
+      "tag": "0005_clear_agent_zero",
+      "breakpoints": true
     }
   ]
 }

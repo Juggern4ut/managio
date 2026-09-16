@@ -50,6 +50,19 @@ interface DocumentSearchResult {
   originalFilename: string
 }
 
+interface ExtractedField {
+  id: string
+  fieldType: string
+  rawText: string
+  normalizedText: string | null
+  amountMinorUnits: number | null
+  currency: string | null
+  companyId: string | null
+  confidence: number
+  extractionMethod: string
+  sourceSnippet: string
+}
+
 const requestFetch = useRequestFetch()
 const { fetchCompanies, createCompany, fetchCategories, createCategory } = useOrganize()
 
@@ -66,6 +79,11 @@ const { data: events, refresh: refreshEvents } = await useAsyncData(
 const { data: relations, refresh: refreshRelations } = await useAsyncData(
   `document-relations-${id}`,
   () => requestFetch<{ items: DocumentRelation[] }>(`/api/documents/${id}/relations`),
+)
+
+const { data: extractedFields, refresh: refreshExtractedFields } = await useAsyncData(
+  `document-extracted-fields-${id}`,
+  () => requestFetch<{ items: ExtractedField[] }>(`/api/documents/${id}/extracted-fields`),
 )
 
 const companies = ref<NamedEntity[]>([])
@@ -98,7 +116,7 @@ function stopPolling() {
 onMounted(() => {
   if (!inProgress.value) return
   pollTimer = setInterval(async () => {
-    await Promise.all([refreshDocument(), refreshEvents()])
+    await Promise.all([refreshDocument(), refreshEvents(), refreshExtractedFields()])
     if (!inProgress.value) stopPolling()
   }, 2000)
 })
@@ -213,6 +231,52 @@ async function removeRelation(relationId: string) {
 function formatDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : '—'
 }
+
+function formatFieldValue(field: ExtractedField): string {
+  if (field.fieldType === 'amount') {
+    return `${((field.amountMinorUnits ?? 0) / 100).toFixed(2)} ${field.currency}`
+  }
+  return field.normalizedText ?? field.rawText
+}
+
+function useAsDocumentDate(field: ExtractedField) {
+  if (field.normalizedText) editDate.value = field.normalizedText
+}
+
+function setAsCompany(field: ExtractedField) {
+  if (field.companyId) editCompanyId.value = field.companyId
+}
+
+const bestDocumentDate = computed(() =>
+  extractedFields.value?.items.find(f => f.fieldType === 'document_date')?.normalizedText,
+)
+
+const bestCouponExpiration = computed(() =>
+  extractedFields.value?.items.find(f => f.fieldType === 'coupon_expiration')?.normalizedText,
+)
+
+function receiptPrefillLink(field: ExtractedField) {
+  return {
+    path: '/receipts',
+    query: {
+      documentId: id,
+      total: ((field.amountMinorUnits ?? 0) / 100).toFixed(2),
+      currency: field.currency ?? 'CHF',
+      date: bestDocumentDate.value,
+    },
+  }
+}
+
+function couponPrefillLink(field: ExtractedField) {
+  return {
+    path: '/coupons',
+    query: {
+      documentId: id,
+      code: field.normalizedText,
+      expiresOn: bestCouponExpiration.value,
+    },
+  }
+}
 </script>
 
 <template>
@@ -322,6 +386,36 @@ function formatDate(iso: string | null): string {
         </p>
       </div>
     </div>
+
+    <h2>Extracted fields</h2>
+    <p class="hint disclaimer">
+      Found automatically by pattern matching — nothing here is applied until you use it.
+    </p>
+    <ul v-if="extractedFields?.items.length" class="extracted-fields">
+      <li v-for="field in extractedFields.items" :key="field.id">
+        <span class="badge">{{ field.fieldType }}</span>
+        <span class="value">{{ formatFieldValue(field) }}</span>
+        <span class="confidence">{{ Math.round(field.confidence * 100) }}%</span>
+        <span class="snippet">{{ field.sourceSnippet }}</span>
+        <span class="apply-actions">
+          <button v-if="field.fieldType === 'document_date'" type="button" class="link-button" @click="useAsDocumentDate(field)">
+            Use as document date
+          </button>
+          <button v-if="field.fieldType === 'company' && field.companyId" type="button" class="link-button" @click="setAsCompany(field)">
+            Set as company
+          </button>
+          <NuxtLink v-if="field.fieldType === 'amount'" class="link-button" :to="receiptPrefillLink(field)">
+            Create receipt
+          </NuxtLink>
+          <NuxtLink v-if="field.fieldType === 'coupon_code'" class="link-button" :to="couponPrefillLink(field)">
+            Create coupon
+          </NuxtLink>
+        </span>
+      </li>
+    </ul>
+    <p v-else class="hint">
+      No fields extracted yet.
+    </p>
 
     <h2>Processing history</h2>
     <ul v-if="events?.items.length" class="events">
@@ -531,6 +625,48 @@ h1 {
 
 .events .error {
   color: #c0392b;
+}
+
+.disclaimer {
+  margin-top: -0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.extracted-fields {
+  list-style: none;
+  padding: 0;
+  margin-bottom: 1.5rem;
+}
+
+.extracted-fields li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.875rem;
+}
+
+.extracted-fields .value {
+  font-weight: 600;
+}
+
+.extracted-fields .confidence {
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+.extracted-fields .snippet {
+  color: #9ca3af;
+  font-size: 0.75rem;
+  flex-basis: 100%;
+}
+
+.extracted-fields .apply-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-left: auto;
 }
 
 .relations {

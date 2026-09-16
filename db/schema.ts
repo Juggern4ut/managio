@@ -26,6 +26,7 @@ import {
 } from '../shared/schemas/document'
 import { discountTypeValues } from '../shared/schemas/coupon'
 import { relationTypeValues } from '../shared/schemas/relation'
+import { extractedFieldTypeValues } from '../shared/schemas/extraction'
 
 export const documentTypeEnum = pgEnum('document_type', documentTypeValues)
 export const processingStatusEnum = pgEnum('processing_status', processingStatusValues)
@@ -34,6 +35,7 @@ export const processingStageEnum = pgEnum('processing_stage', processingStageVal
 export const stageStatusEnum = pgEnum('stage_status', stageStatusValues)
 export const discountTypeEnum = pgEnum('discount_type', discountTypeValues)
 export const relationTypeEnum = pgEnum('relation_type', relationTypeValues)
+export const extractedFieldTypeEnum = pgEnum('extracted_field_type', extractedFieldTypeValues)
 
 // Postgres full-text search vector. No dedicated Drizzle column type exists
 // for this, hence the customType.
@@ -364,5 +366,42 @@ export const documentRelations = pgTable(
       foreignColumns: [documents.id],
       name: 'document_relations_target_document_id_fk',
     }).onDelete('cascade'),
+  ],
+)
+
+export const documentExtractedFields = pgTable(
+  'document_extracted_fields',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentId: uuid('document_id').notNull(),
+    fieldType: extractedFieldTypeEnum('field_type').notNull(),
+    // The exact matched substring, preserved as-is (never edited/fabricated).
+    rawText: text('raw_text').notNull(),
+    // A plain-string normalization (ISO date, invoice number, coupon code).
+    // Money uses amountMinorUnits/currency instead; company matches use
+    // companyId. Never more than one of these three is populated.
+    normalizedText: text('normalized_text'),
+    amountMinorUnits: integer('amount_minor_units'),
+    currency: text('currency'),
+    companyId: uuid('company_id'),
+    confidence: numeric('confidence', { precision: 3, scale: 2, mode: 'number' }).notNull(),
+    extractionMethod: text('extraction_method').notNull(),
+    // Surrounding OCR text for a human to judge the match in context.
+    sourceSnippet: text('source_snippet').notNull(),
+    processorVersion: text('processor_version').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  table => [
+    index('document_extracted_fields_document_id_idx').on(table.documentId),
+    foreignKey({
+      columns: [table.documentId],
+      foreignColumns: [documents.id],
+      name: 'document_extracted_fields_document_id_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.companyId],
+      foreignColumns: [companies.id],
+      name: 'document_extracted_fields_company_id_fk',
+    }).onDelete('set null'),
   ],
 )

@@ -76,10 +76,11 @@ server/
     documents/  Upload validation, file-signature sniffing, checksums, stage logging
     storage/    Storage interface (filesystem today, swappable for MinIO)
     jobs/       BullMQ queue + Redis connection (shared with the worker)
+    extraction/ Deterministic field extraction (dates, amounts, invoice/coupon codes, companies)
   middleware/   Server middleware (auth guard)
-  utils/        Auto-imported server utils (db client, logger)
+  utils/        Auto-imported server utils (db client, logger, pg error helper)
 worker/         Standalone Node process consuming the documents queue
-  processors/   Preview generation, OCR, per-document orchestration
+  processors/   Preview generation, OCR, deterministic extraction, per-document orchestration
 shared/
   schemas/      Zod schemas (source of truth for controlled values)
   types/        Types inferred from schemas
@@ -113,5 +114,17 @@ tests/          Vitest tests
   gained a "Related documents" section for linking documents to each other
   (`related_to`, `duplicate_of`, `part_of_case`, `supports_purchase`,
   `proves_warranty`).
+- **Phase 6** — deterministic extraction: a new EXTRACT worker stage runs
+  pattern-based extraction over OCR text right after OCR completes —
+  ISO/Swiss dates (incl. 2-digit years, calendar-validated), CHF/EUR/USD
+  amounts (Swiss `1'234.50` thousands separator, comma-decimal, never
+  guessing on genuinely ambiguous separators), invoice numbers, due dates
+  and coupon expiration dates (keyword-proximity, German/French/English
+  labels), coupon codes, and matches against companies already known to
+  this instance. Every result keeps its raw matched text, a confidence
+  score, the extraction method, and a source snippet — nothing is ever
+  written into a document/receipt/coupon automatically; the document
+  detail page's "Extracted fields" panel has quick-apply buttons (date,
+  company) and prefill links into the Receipts/Coupons create forms.
 
 AI classification/extraction land in later phases per `roadmap.md`.

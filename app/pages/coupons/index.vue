@@ -16,6 +16,7 @@ interface Coupon {
   conditions: string | null
 }
 
+const route = useRoute()
 const requestFetch = useRequestFetch()
 const { fetchCompanies } = useOrganize()
 
@@ -23,11 +24,14 @@ const { data: coupons, refresh } = await useAsyncData('coupons', () =>
   requestFetch<{ items: Coupon[] }>('/api/coupons'))
 const companies = ref<NamedEntity[]>(await fetchCompanies())
 
-const code = ref('')
+// Prefilled when arriving from a document's extracted fields, e.g.
+// /coupons?documentId=...&code=SAVE20&expiresOn=2026-12-31
+const sourceDocumentId = ref((route.query.documentId as string) || '')
+const code = ref((route.query.code as string) || '')
 const issuerCompanyId = ref('')
 const discountType = ref<typeof discountTypeValues[number]>('percentage')
 const discountValue = ref<number | null>(null)
-const expiresOn = ref('')
+const expiresOn = ref((route.query.expiresOn as string) || '')
 const conditions = ref('')
 const creating = ref(false)
 const error = ref('')
@@ -40,6 +44,7 @@ async function create() {
     await requestFetch('/api/coupons', {
       method: 'POST',
       body: {
+        sourceDocumentId: sourceDocumentId.value || undefined,
         code: code.value || undefined,
         issuerCompanyId: issuerCompanyId.value || undefined,
         discountType: discountType.value,
@@ -52,6 +57,7 @@ async function create() {
     discountValue.value = null
     expiresOn.value = ''
     conditions.value = ''
+    sourceDocumentId.value = ''
     await refresh()
   }
   catch {
@@ -85,6 +91,12 @@ function isExpired(coupon: Coupon): boolean {
 <template>
   <div>
     <h1>Coupons</h1>
+
+    <p v-if="sourceDocumentId" class="linked-hint">
+      Linked to <NuxtLink :to="`/documents/${sourceDocumentId}`">
+        this document
+      </NuxtLink>
+    </p>
 
     <form class="create-form" @submit.prevent="create">
       <input v-model="code" placeholder="Code (optional)">
@@ -175,6 +187,12 @@ function isExpired(coupon: Coupon): boolean {
 .error {
   color: #c0392b;
   font-size: 0.875rem;
+}
+
+.linked-hint {
+  color: #1f6feb;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
 }
 
 .hint {

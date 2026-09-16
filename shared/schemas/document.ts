@@ -35,10 +35,10 @@ export const reviewStatusValues = ['not_required', 'pending', 'approved'] as con
 
 export const reviewStatusSchema = z.enum(reviewStatusValues)
 
-// Stages recorded in document_processing_events. Only PREPROCESS and OCR
-// run so far; CLASSIFY/EXTRACT/RESOLVE_ENTITIES/DETECT_RELATIONS/INDEX are
-// added as those pipelines land in later phases.
-export const processingStageValues = ['PREPROCESS', 'OCR'] as const
+// Stages recorded in document_processing_events. PREPROCESS/OCR/EXTRACT run
+// so far; CLASSIFY/RESOLVE_ENTITIES/DETECT_RELATIONS/INDEX are added as
+// those pipelines land in later phases.
+export const processingStageValues = ['PREPROCESS', 'OCR', 'EXTRACT'] as const
 
 export const processingStageSchema = z.enum(processingStageValues)
 

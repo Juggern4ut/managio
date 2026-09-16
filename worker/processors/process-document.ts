@@ -5,8 +5,9 @@ import { eq } from 'drizzle-orm'
 import { db } from '../db'
 import { logger } from '../logger'
 import { storage } from '../storage'
-import { documents } from '../../db/schema'
+import { companies, documentExtractedFields, documents } from '../../db/schema'
 import { finishStageFailure, finishStageSuccess, startStage } from '../../server/services/documents/stage-log'
+import { extractFields } from '../../server/services/extraction'
 import type { ProcessingStatus } from '../../shared/types/document'
 import { generatePreviewPng } from './preview'
 import { runOcr } from './ocr'
@@ -34,11 +35,14 @@ export async function processDocument(documentId: string): Promise<void> {
     const previewPath = await preprocess(documentId, document.mimeType, originalPath, tempDir)
     await setStatus(documentId, 'PREPROCESSED')
 
-    await ocr(documentId, document.mimeType, originalPath, previewPath, tempDir)
+    const ocrText = await ocr(documentId, document.mimeType, originalPath, previewPath, tempDir)
     await setStatus(documentId, 'OCR_COMPLETED')
 
-    // No classification/extraction pipeline exists yet (later phases), so
-    // OCR is currently the last automated stage.
+    await extract(documentId, ocrText)
+    await setStatus(documentId, 'EXTRACTED')
+
+    // No AI classification pipeline exists yet (a later phase), so
+    // deterministic extraction is currently the last automated stage.
     await setStatus(documentId, 'COMPLETE')
     logger.info('Document processing complete', { documentId })
   }
@@ -83,7 +87,7 @@ async function ocr(
   originalPath: string,
   previewPath: string,
   tempDir: string,
-): Promise<void> {
+): Promise<string> {
   const eventId = await startStage(db, documentId, 'OCR', PROCESSOR_VERSION)
   try {
     const result = await runOcr({
@@ -104,9 +108,47 @@ async function ocr(
     await db.update(documents).set(updates).where(eq(documents.id, documentId))
 
     await finishStageSuccess(db, eventId)
+    return result.text
   }
   catch (error) {
     await finishStageFailure(db, eventId, 'OCR_FAILED', safeMessage(error))
+    throw error
+  }
+}
+
+async function extract(documentId: string, ocrText: string): Promise<void> {
+  const eventId = await startStage(db, documentId, 'EXTRACT', PROCESSOR_VERSION)
+  try {
+    const knownCompanies = await db.select({ id: companies.id, name: companies.name }).from(companies)
+    const fields = extractFields(ocrText, knownCompanies)
+
+    // Idempotent: re-running EXTRACT (retry, reprocess) replaces this
+    // document's candidates rather than piling up duplicates.
+    await db.transaction(async (tx) => {
+      await tx.delete(documentExtractedFields).where(eq(documentExtractedFields.documentId, documentId))
+      if (fields.length > 0) {
+        await tx.insert(documentExtractedFields).values(
+          fields.map(field => ({
+            documentId,
+            fieldType: field.fieldType,
+            rawText: field.rawText,
+            normalizedText: field.normalizedText,
+            amountMinorUnits: field.amountMinorUnits,
+            currency: field.currency,
+            companyId: field.companyId,
+            confidence: field.confidence,
+            extractionMethod: field.extractionMethod,
+            sourceSnippet: field.sourceSnippet,
+            processorVersion: PROCESSOR_VERSION,
+          })),
+        )
+      }
+    })
+
+    await finishStageSuccess(db, eventId)
+  }
+  catch (error) {
+    await finishStageFailure(db, eventId, 'EXTRACT_FAILED', safeMessage(error))
     throw error
   }
 }

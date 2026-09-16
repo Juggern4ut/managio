@@ -27,6 +27,7 @@ interface ItemDraft {
   productId: string
 }
 
+const route = useRoute()
 const requestFetch = useRequestFetch()
 const { fetchCompanies, createCompany } = useOrganize()
 
@@ -36,11 +37,14 @@ const { data: products } = await useAsyncData('products-for-receipt', () =>
   requestFetch<{ items: NamedEntity[] }>('/api/products'))
 const companies = ref<NamedEntity[]>(await fetchCompanies())
 
+// Prefilled when arriving from a document's extracted fields, e.g.
+// /receipts?documentId=...&total=12.50&date=2026-09-14&currency=CHF
+const documentId = ref((route.query.documentId as string) || '')
 const merchantCompanyId = ref('')
 const newCompanyName = ref('')
-const purchaseDate = ref('')
-const total = ref<number | null>(null)
-const currency = ref('CHF')
+const purchaseDate = ref((route.query.date as string) || '')
+const total = ref<number | null>(route.query.total ? Number(route.query.total) : null)
+const currency = ref((route.query.currency as string) || 'CHF')
 const items = ref<ItemDraft[]>([])
 const creating = ref(false)
 const error = ref('')
@@ -81,6 +85,7 @@ async function create() {
     await requestFetch('/api/receipts', {
       method: 'POST',
       body: {
+        documentId: documentId.value || undefined,
         merchantCompanyId: merchantCompanyId.value || undefined,
         purchaseDate: purchaseDate.value,
         totalMinorUnits: Math.round(total.value * 100),
@@ -99,6 +104,7 @@ async function create() {
     purchaseDate.value = ''
     total.value = null
     items.value = []
+    documentId.value = ''
     await refresh()
   }
   catch {
@@ -135,6 +141,12 @@ function formatDate(iso: string): string {
 <template>
   <div>
     <h1>Receipts</h1>
+
+    <p v-if="documentId" class="linked-hint">
+      Linked to <NuxtLink :to="`/documents/${documentId}`">
+        this document
+      </NuxtLink>
+    </p>
 
     <form class="create-form" @submit.prevent="create">
       <div class="row">
@@ -290,6 +302,12 @@ function formatDate(iso: string): string {
 .error {
   color: #c0392b;
   font-size: 0.875rem;
+}
+
+.linked-hint {
+  color: #1f6feb;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
 }
 
 .submit {
