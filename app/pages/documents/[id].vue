@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { documentTypeValues } from '#shared/schemas/document'
+import type { NamedEntity } from '~/composables/useOrganize'
+
 const route = useRoute()
 const id = route.params.id as string
 
@@ -16,6 +19,11 @@ interface DocumentDetail {
   ocrText: string | null
   hasPreview: boolean
   hasSearchablePdf: boolean
+  companyId: string | null
+  companyName: string | null
+  categoryId: string | null
+  categoryName: string | null
+  tags: NamedEntity[]
 }
 
 interface ProcessingEvent {
@@ -29,6 +37,7 @@ interface ProcessingEvent {
 }
 
 const requestFetch = useRequestFetch()
+const { fetchCompanies, createCompany, fetchCategories, createCategory } = useOrganize()
 
 const { data: document, refresh: refreshDocument } = await useAsyncData(
   `document-${id}`,
@@ -39,6 +48,20 @@ const { data: events, refresh: refreshEvents } = await useAsyncData(
   `document-events-${id}`,
   () => requestFetch<{ items: ProcessingEvent[] }>(`/api/documents/${id}/events`),
 )
+
+const companies = ref<NamedEntity[]>([])
+const categories = ref<NamedEntity[]>([])
+;[companies.value, categories.value] = await Promise.all([fetchCompanies(), fetchCategories()])
+
+const editType = ref(document.value?.documentType ?? 'unknown')
+const editCompanyId = ref(document.value?.companyId ?? '')
+const editCategoryId = ref(document.value?.categoryId ?? '')
+const editDate = ref(document.value?.documentDate?.slice(0, 10) ?? '')
+const tagsInput = ref(document.value?.tags.map(t => t.name).join(', ') ?? '')
+const newCompanyName = ref('')
+const newCategoryName = ref('')
+const saving = ref(false)
+const saveMessage = ref('')
 
 const inProgress = computed(() =>
   document.value
@@ -63,6 +86,57 @@ onMounted(() => {
 
 onUnmounted(stopPolling)
 
+async function addCompany() {
+  const name = newCompanyName.value.trim()
+  if (!name) return
+  const company = await createCompany(name)
+  if (!companies.value.some(c => c.id === company.id)) companies.value.push(company)
+  editCompanyId.value = company.id
+  newCompanyName.value = ''
+}
+
+async function addCategory() {
+  const name = newCategoryName.value.trim()
+  if (!name) return
+  const category = await createCategory(name)
+  if (!categories.value.some(c => c.id === category.id)) categories.value.push(category)
+  editCategoryId.value = category.id
+  newCategoryName.value = ''
+}
+
+async function save() {
+  saving.value = true
+  saveMessage.value = ''
+  try {
+    await requestFetch(`/api/documents/${id}`, {
+      method: 'PATCH',
+      body: {
+        documentType: editType.value,
+        companyId: editCompanyId.value || null,
+        categoryId: editCategoryId.value || null,
+        documentDate: editDate.value || null,
+      },
+    })
+    const tagNames = tagsInput.value.split(',').map(name => name.trim()).filter(Boolean)
+    await requestFetch(`/api/documents/${id}/tags`, { method: 'PUT', body: { tags: tagNames } })
+    await refreshDocument()
+    saveMessage.value = 'Saved'
+  }
+  catch {
+    saveMessage.value = 'Failed to save'
+  }
+  finally {
+    saving.value = false
+  }
+}
+
+async function toggleReviewed() {
+  if (!document.value) return
+  const next = document.value.reviewStatus === 'approved' ? 'pending' : 'approved'
+  await requestFetch(`/api/documents/${id}`, { method: 'PATCH', body: { reviewStatus: next } })
+  await refreshDocument()
+}
+
 function formatDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : '—'
 }
@@ -86,7 +160,74 @@ function formatDate(iso: string | null): string {
         target="_blank"
         rel="noopener"
       >Searchable PDF</a>
+      <button type="button" class="link-button" @click="toggleReviewed">
+        {{ document.reviewStatus === 'approved' ? 'Move back to inbox' : 'Mark reviewed' }}
+      </button>
     </div>
+
+    <form class="edit-panel" @submit.prevent="save">
+      <div class="field">
+        <label for="type">Type</label>
+        <select id="type" v-model="editType">
+          <option v-for="type in documentTypeValues" :key="type" :value="type">
+            {{ type }}
+          </option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="company">Company</label>
+        <select id="company" v-model="editCompanyId">
+          <option value="">
+            None
+          </option>
+          <option v-for="company in companies" :key="company.id" :value="company.id">
+            {{ company.name }}
+          </option>
+        </select>
+        <div class="inline-create">
+          <input v-model="newCompanyName" placeholder="New company…" @keyup.enter.prevent="addCompany">
+          <button type="button" @click="addCompany">
+            Add
+          </button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="category">Category</label>
+        <select id="category" v-model="editCategoryId">
+          <option value="">
+            None
+          </option>
+          <option v-for="category in categories" :key="category.id" :value="category.id">
+            {{ category.name }}
+          </option>
+        </select>
+        <div class="inline-create">
+          <input v-model="newCategoryName" placeholder="New category…" @keyup.enter.prevent="addCategory">
+          <button type="button" @click="addCategory">
+            Add
+          </button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="tags">Tags</label>
+        <input id="tags" v-model="tagsInput" placeholder="comma, separated, tags">
+      </div>
+
+      <div class="field">
+        <label for="date">Document date</label>
+        <input id="date" v-model="editDate" type="date">
+      </div>
+
+      <div class="actions">
+        <button type="submit" :disabled="saving">
+          {{ saving ? 'Saving…' : 'Save' }}
+        </button>
+        <span v-if="saveMessage" class="save-message">{{ saveMessage }}</span>
+      </div>
+    </form>
 
     <div class="layout">
       <div class="preview">
@@ -144,6 +285,77 @@ h1 {
   border-radius: 999px;
   background: #eef2ff;
   color: #3730a3;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: #1f6feb;
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+  text-decoration: underline;
+}
+
+.edit-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.875rem;
+}
+
+.field label {
+  font-weight: 600;
+}
+
+.field select,
+.field input {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+}
+
+.inline-create {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.inline-create input {
+  flex: 1;
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  grid-column: 1 / -1;
+}
+
+.actions button[type='submit'] {
+  padding: 0.5rem 1.25rem;
+  background: #1f6feb;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.save-message {
+  color: #15803d;
+  font-size: 0.875rem;
 }
 
 .layout {

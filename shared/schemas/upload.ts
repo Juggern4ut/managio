@@ -1,5 +1,3 @@
-import { z } from 'zod'
-
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024 // 25 MB
 
 export const allowedUploadTypes = {
@@ -18,8 +16,3 @@ export const uploadValidationErrorCodes = [
   'FILE_TOO_LARGE',
   'UNSUPPORTED_TYPE',
 ] as const
-
-export const documentListQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(25),
-  offset: z.coerce.number().int().min(0).default(0),
-})

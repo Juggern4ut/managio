@@ -9,8 +9,8 @@ interface QueueEntry {
 }
 
 const { data: health } = await useFetch('/api/health')
-const { list, loading, refresh, upload } = useDocuments()
-await refresh()
+const { list, loading, refresh, upload } = useDocuments('inbox-list')
+await refresh({ reviewStatus: 'pending' })
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const isDragging = ref(false)
@@ -40,7 +40,7 @@ async function handleFiles(files: FileList) {
     updateQueueEntry(key, outcome)
   }
 
-  await refresh()
+  await refresh({ reviewStatus: 'pending' })
 }
 
 function updateQueueEntry(key: string, outcome: UploadOutcome) {
@@ -115,12 +115,15 @@ function formatDate(iso: string): string {
       </li>
     </ul>
 
-    <h2>Documents</h2>
+    <h2>Needs review</h2>
     <p v-if="loading">
       Loading…
     </p>
     <p v-else-if="!list?.items.length">
-      No documents yet. Upload one above.
+      Nothing to review. Browse everything on the
+      <NuxtLink to="/documents">
+        Documents
+      </NuxtLink> page.
     </p>
     <table v-else class="documents">
       <thead>

@@ -44,6 +44,11 @@ for the architectural conventions this codebase follows.
    stale anonymous `node_modules` volume and fail with "Cannot find
    package". Fix: `docker compose rm -fsv app worker && docker compose up -d --build app worker`.
 
+   The containers write into `./data` as root, so switching from `docker
+   compose up` to running `npm run dev` directly on the host can hit
+   `EACCES` on upload. Fix: `docker run --rm -v "$(pwd)":/app node:24-alpine
+   chown -R "$(id -u):$(id -g)" /app/data`.
+
 3. Visit http://localhost:3000 and sign in with the admin user from `.env`.
 
 ## Scripts
@@ -95,6 +100,11 @@ tests/          Vitest tests
   and runs OCR (OCRmyPDF for PDFs, Tesseract for images) on every upload,
   recording per-stage timing/errors and retrying transient failures. The
   document detail page shows the preview next to the extracted text.
+- **Phase 4** — search and manual organization: PostgreSQL full-text search
+  over filename + OCR text (weighted, `simple` config for multilingual
+  content), manual document type/company/category/tags, and an Inbox that
+  now shows only documents still needing review — everything else lives on
+  the searchable/filterable Documents page.
 
 AI classification/extraction and the rest of the domain model land in later
 phases per `roadmap.md`.

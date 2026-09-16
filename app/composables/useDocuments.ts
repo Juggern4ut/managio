@@ -6,7 +6,10 @@ export interface DocumentSummary {
   documentType: string
   processingStatus: string
   reviewStatus: string
+  documentDate: string | null
   uploadedAt: string
+  companyName: string | null
+  categoryName: string | null
 }
 
 export interface DocumentListResponse {
@@ -16,25 +19,39 @@ export interface DocumentListResponse {
   offset: number
 }
 
+export interface DocumentListQuery {
+  q?: string
+  documentType?: string
+  reviewStatus?: string
+  companyId?: string
+  categoryId?: string
+  tagId?: string
+  limit?: number
+  offset?: number
+}
+
 export type UploadOutcome
   = | { status: 'uploaded', documentId: string, processingStatus: string }
     | { status: 'duplicate', documentId: string }
     | { status: 'error', message: string }
 
-export function useDocuments() {
+// `key` isolates the shared list state per usage (e.g. the Inbox's
+// pending-only list vs. the Documents page's search results), so
+// navigating between them doesn't show the other's stale data.
+export function useDocuments(key: string = 'documents-list') {
   // Plain global `$fetch` does not forward the session cookie during SSR.
   // useRequestFetch() returns an isomorphic fetch that does (and behaves
   // like normal $fetch on the client), so the authenticated /api/documents
   // calls below work on both the initial server render and later on the client.
   const requestFetch = useRequestFetch()
-  const list = useState<DocumentListResponse | null>('documents-list', () => null)
+  const list = useState<DocumentListResponse | null>(key, () => null)
   const loading = ref(false)
 
-  async function refresh() {
+  async function refresh(query: DocumentListQuery = {}) {
     loading.value = true
     try {
       list.value = await requestFetch<DocumentListResponse>('/api/documents', {
-        query: { limit: 50, offset: 0 },
+        query: { limit: 50, offset: 0, ...query },
       })
     }
     finally {
