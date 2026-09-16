@@ -1,22 +1,25 @@
 <script setup lang="ts">
-import { documentTypeValues, reviewStatusValues } from '#shared/schemas/document'
+import { reviewStatusValues } from '#shared/schemas/document'
+import type { DocumentTypeEntity } from '~/composables/useDocumentTypes'
 import type { NamedEntity } from '~/composables/useOrganize'
 
-const { list, loading, refresh } = useDocuments('documents-search')
+const { list, loading, refresh, deleteDocument } = useDocuments('documents-search')
 const { fetchCompanies } = useOrganize()
+const { fetchDocumentTypes } = useDocumentTypes()
 
 const q = ref('')
-const documentType = ref('')
+const typeId = ref('')
 const reviewStatus = ref('')
 const companyId = ref('')
 const companies = ref<NamedEntity[]>([])
+const documentTypes = ref<DocumentTypeEntity[]>([])
 const offset = ref(0)
 const limit = 25
 
 async function runSearch() {
   await refresh({
     q: q.value || undefined,
-    documentType: documentType.value || undefined,
+    typeId: typeId.value || undefined,
     reviewStatus: reviewStatus.value || undefined,
     companyId: companyId.value || undefined,
     limit,
@@ -24,9 +27,13 @@ async function runSearch() {
   })
 }
 
-await Promise.all([runSearch(), fetchCompanies().then(items => (companies.value = items))])
+await Promise.all([
+  runSearch(),
+  fetchCompanies().then(items => (companies.value = items)),
+  fetchDocumentTypes().then(items => (documentTypes.value = items)),
+])
 
-watch([q, documentType, reviewStatus, companyId], () => {
+watch([q, typeId, reviewStatus, companyId], () => {
   offset.value = 0
   runSearch()
 })
@@ -42,6 +49,12 @@ function prevPage() {
   runSearch()
 }
 
+async function remove(id: string, filename: string) {
+  if (!confirm(`Delete "${filename}"? This removes the original file and cannot be undone.`)) return
+  await deleteDocument(id)
+  await runSearch()
+}
+
 function formatDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString() : '—'
 }
@@ -53,12 +66,12 @@ function formatDate(iso: string | null): string {
 
     <div class="filters">
       <input v-model="q" type="search" placeholder="Search filename or OCR text…" class="search">
-      <select v-model="documentType">
+      <select v-model="typeId">
         <option value="">
           All types
         </option>
-        <option v-for="type in documentTypeValues" :key="type" :value="type">
-          {{ type }}
+        <option v-for="type in documentTypes" :key="type.id" :value="type.id">
+          {{ type.name }}
         </option>
       </select>
       <select v-model="reviewStatus">
@@ -101,17 +114,22 @@ function formatDate(iso: string | null): string {
         <tbody>
           <tr v-for="doc in list.items" :key="doc.id">
             <td>{{ doc.originalFilename }}</td>
-            <td>{{ doc.documentType }}</td>
+            <td>
+              <TypeBadge :name="doc.typeName" :color="doc.typeColor" />
+            </td>
             <td>{{ doc.companyName ?? '—' }}</td>
             <td>{{ doc.categoryName ?? '—' }}</td>
             <td>
               <span class="badge">{{ doc.reviewStatus }}</span>
             </td>
             <td>{{ formatDate(doc.documentDate) }}</td>
-            <td>
+            <td class="actions">
               <NuxtLink :to="`/documents/${doc.id}`">
                 View
               </NuxtLink>
+              <button type="button" class="link-button danger" @click="remove(doc.id, doc.originalFilename)">
+                Delete
+              </button>
             </td>
           </tr>
         </tbody>
@@ -172,6 +190,26 @@ function formatDate(iso: string | null): string {
   background: #eef2ff;
   color: #3730a3;
   font-size: 0.75rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: #1f6feb;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  font-size: 0.875rem;
+}
+
+.link-button.danger {
+  color: #c0392b;
 }
 
 .pagination {

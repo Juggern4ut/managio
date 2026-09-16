@@ -3,7 +3,9 @@ export interface DocumentSummary {
   originalFilename: string
   mimeType: string
   fileSizeBytes: number
-  documentType: string
+  typeId: string | null
+  typeName: string | null
+  typeColor: string | null
   processingStatus: string
   reviewStatus: string
   documentDate: string | null
@@ -21,7 +23,7 @@ export interface DocumentListResponse {
 
 export interface DocumentListQuery {
   q?: string
-  documentType?: string
+  typeId?: string
   reviewStatus?: string
   companyId?: string
   categoryId?: string
@@ -77,5 +79,9 @@ export function useDocuments(key: string = 'documents-list') {
     }
   }
 
-  return { list, loading, refresh, upload }
+  async function deleteDocument(id: string): Promise<void> {
+    await requestFetch(`/api/documents/${id}`, { method: 'DELETE' })
+  }
+
+  return { list, loading, refresh, upload, deleteDocument }
 }

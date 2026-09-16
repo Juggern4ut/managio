@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { categories, companies, documentTags, documents, tags } from '../../../db/schema'
+import { categories, companies, documentTags, documents, documentTypes, tags } from '../../../db/schema'
 
 const paramsSchema = z.object({ id: z.uuid() })
 
@@ -15,7 +15,9 @@ export default defineEventHandler(async (event) => {
         originalFilename: documents.originalFilename,
         mimeType: documents.mimeType,
         fileSizeBytes: documents.fileSizeBytes,
-        documentType: documents.documentType,
+        typeId: documents.typeId,
+        typeName: documentTypes.name,
+        typeColor: documentTypes.color,
         processingStatus: documents.processingStatus,
         reviewStatus: documents.reviewStatus,
         documentDate: documents.documentDate,
@@ -32,6 +34,7 @@ export default defineEventHandler(async (event) => {
       .from(documents)
       .leftJoin(companies, eq(documents.companyId, companies.id))
       .leftJoin(categories, eq(documents.categoryId, categories.id))
+      .leftJoin(documentTypes, eq(documents.typeId, documentTypes.id))
       .where(eq(documents.id, id))
       .limit(1)
       .then(rows => rows[0]),

@@ -26,7 +26,6 @@ export default defineEventHandler(async (event) => {
         .select({
           id: documents.id,
           originalFilename: documents.originalFilename,
-          documentType: documents.documentType,
         })
         .from(documents)
         .where(inArray(documents.id, otherDocumentIds))

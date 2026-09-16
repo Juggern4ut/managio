@@ -9,7 +9,7 @@ interface QueueEntry {
 }
 
 const { data: health } = await useFetch('/api/health')
-const { list, loading, refresh, upload } = useDocuments('inbox-list')
+const { list, loading, refresh, upload, deleteDocument } = useDocuments('inbox-list')
 await refresh({ reviewStatus: 'pending' })
 
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -75,6 +75,12 @@ function formatBytes(bytes: number): string {
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString()
 }
+
+async function remove(id: string, filename: string) {
+  if (!confirm(`Delete "${filename}"? This removes the original file and cannot be undone.`)) return
+  await deleteDocument(id)
+  await refresh({ reviewStatus: 'pending' })
+}
 </script>
 
 <template>
@@ -139,16 +145,21 @@ function formatDate(iso: string): string {
       <tbody>
         <tr v-for="doc in list.items" :key="doc.id">
           <td>{{ doc.originalFilename }}</td>
-          <td>{{ doc.documentType }}</td>
+          <td>
+            <TypeBadge :name="doc.typeName" :color="doc.typeColor" />
+          </td>
           <td>{{ formatBytes(doc.fileSizeBytes) }}</td>
           <td>
             <span class="badge" :class="doc.processingStatus.toLowerCase()">{{ doc.processingStatus }}</span>
           </td>
           <td>{{ formatDate(doc.uploadedAt) }}</td>
-          <td>
+          <td class="actions">
             <NuxtLink :to="`/documents/${doc.id}`">
               View
             </NuxtLink>
+            <button type="button" class="link-button danger" @click="remove(doc.id, doc.originalFilename)">
+              Delete
+            </button>
           </td>
         </tr>
       </tbody>
@@ -241,6 +252,26 @@ function formatDate(iso: string): string {
   background: #eef2ff;
   color: #3730a3;
   font-size: 0.75rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: #1f6feb;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  font-size: 0.875rem;
+}
+
+.link-button.danger {
+  color: #c0392b;
 }
 
 .status {

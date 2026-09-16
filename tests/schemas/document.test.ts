@@ -1,16 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { documentTypeSchema, processingStatusSchema } from '../../shared/schemas/document'
-
-describe('documentTypeSchema', () => {
-  it('accepts known document types', () => {
-    expect(documentTypeSchema.parse('invoice')).toBe('invoice')
-    expect(documentTypeSchema.parse('unknown')).toBe('unknown')
-  })
-
-  it('rejects unknown values instead of guessing', () => {
-    expect(() => documentTypeSchema.parse('made_up_type')).toThrow()
-  })
-})
+import { processingStatusSchema } from '../../shared/schemas/document'
 
 describe('processingStatusSchema', () => {
   it('accepts every stage of the processing pipeline', () => {

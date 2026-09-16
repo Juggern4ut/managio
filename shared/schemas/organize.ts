@@ -4,7 +4,7 @@ export function normalizeName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
-const nameSchema = z.string().trim().min(1).max(200)
+export const nameSchema = z.string().trim().min(1).max(200)
 
 export const createCompanySchema = z.object({
   name: nameSchema,

@@ -18,7 +18,6 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import {
-  documentTypeValues,
   processingStageValues,
   processingStatusValues,
   reviewStatusValues,
@@ -28,7 +27,6 @@ import { discountTypeValues } from '../shared/schemas/coupon'
 import { relationTypeValues } from '../shared/schemas/relation'
 import { extractedFieldTypeValues } from '../shared/schemas/extraction'
 
-export const documentTypeEnum = pgEnum('document_type', documentTypeValues)
 export const processingStatusEnum = pgEnum('processing_status', processingStatusValues)
 export const reviewStatusEnum = pgEnum('review_status', reviewStatusValues)
 export const processingStageEnum = pgEnum('processing_stage', processingStageValues)
@@ -81,6 +79,20 @@ export const tags = pgTable(
   table => [uniqueIndex('tags_normalized_name_idx').on(table.normalizedName)],
 )
 
+export const documentTypes = pgTable(
+  'document_types',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    normalizedName: text('normalized_name').notNull(),
+    // Hex color, e.g. "#2563eb" — drives the badge background wherever this
+    // type is shown.
+    color: text('color').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  table => [uniqueIndex('document_types_normalized_name_idx').on(table.normalizedName)],
+)
+
 export const documents = pgTable(
   'documents',
   {
@@ -92,7 +104,9 @@ export const documents = pgTable(
     fileSizeBytes: bigint('file_size_bytes', { mode: 'number' }).notNull(),
     uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
     documentDate: timestamp('document_date', { withTimezone: true, mode: 'date' }),
-    documentType: documentTypeEnum('document_type').notNull().default('unknown'),
+    // Null = no type assigned yet. Document types are user-managed (see
+    // documentTypes above), not a fixed enum.
+    typeId: uuid('type_id'),
     processingStatus: processingStatusEnum('processing_status').notNull().default('UPLOADED'),
     ocrText: text('ocr_text'),
     // Derived artifacts. Nullable: they only exist once PREPROCESS/OCR succeed,
@@ -132,6 +146,11 @@ export const documents = pgTable(
       columns: [table.categoryId],
       foreignColumns: [categories.id],
       name: 'documents_category_id_fk',
+    }).onDelete('set null'),
+    foreignKey({
+      columns: [table.typeId],
+      foreignColumns: [documentTypes.id],
+      name: 'documents_type_id_fk',
     }).onDelete('set null'),
   ],
 )

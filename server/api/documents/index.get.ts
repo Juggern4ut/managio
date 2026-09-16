@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
-import { categories, companies, documentTags, documents } from '../../../db/schema'
+import { categories, companies, documentTags, documents, documentTypes } from '../../../db/schema'
 import { documentListQuerySchema } from '../../../shared/schemas/document'
 
 export default defineEventHandler(async (event) => {
@@ -7,7 +7,7 @@ export default defineEventHandler(async (event) => {
   const db = useDb()
 
   const conditions = []
-  if (query.documentType) conditions.push(eq(documents.documentType, query.documentType))
+  if (query.typeId) conditions.push(eq(documents.typeId, query.typeId))
   if (query.reviewStatus) conditions.push(eq(documents.reviewStatus, query.reviewStatus))
   if (query.companyId) conditions.push(eq(documents.companyId, query.companyId))
   if (query.categoryId) conditions.push(eq(documents.categoryId, query.categoryId))
@@ -35,7 +35,9 @@ export default defineEventHandler(async (event) => {
         originalFilename: documents.originalFilename,
         mimeType: documents.mimeType,
         fileSizeBytes: documents.fileSizeBytes,
-        documentType: documents.documentType,
+        typeId: documents.typeId,
+        typeName: documentTypes.name,
+        typeColor: documentTypes.color,
         processingStatus: documents.processingStatus,
         reviewStatus: documents.reviewStatus,
         documentDate: documents.documentDate,
@@ -46,6 +48,7 @@ export default defineEventHandler(async (event) => {
       .from(documents)
       .leftJoin(companies, eq(documents.companyId, companies.id))
       .leftJoin(categories, eq(documents.categoryId, categories.id))
+      .leftJoin(documentTypes, eq(documents.typeId, documentTypes.id))
       .where(whereClause)
       .orderBy(orderBy)
       .limit(query.limit)

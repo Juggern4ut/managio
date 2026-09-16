@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { documentTypeValues } from '#shared/schemas/document'
 import { relationTypeValues } from '#shared/schemas/relation'
+import type { DocumentTypeEntity } from '~/composables/useDocumentTypes'
 import type { NamedEntity } from '~/composables/useOrganize'
 
 const route = useRoute()
@@ -11,7 +11,9 @@ interface DocumentDetail {
   originalFilename: string
   mimeType: string
   fileSizeBytes: number
-  documentType: string
+  typeId: string | null
+  typeName: string | null
+  typeColor: string | null
   processingStatus: string
   reviewStatus: string
   documentDate: string | null
@@ -42,7 +44,7 @@ interface DocumentRelation {
   relationType: string
   direction: 'incoming' | 'outgoing'
   createdAt: string
-  document: { id: string, originalFilename: string, documentType: string } | null
+  document: { id: string, originalFilename: string } | null
 }
 
 interface DocumentSearchResult {
@@ -65,6 +67,8 @@ interface ExtractedField {
 
 const requestFetch = useRequestFetch()
 const { fetchCompanies, createCompany, fetchCategories, createCategory } = useOrganize()
+const { fetchDocumentTypes, createDocumentType } = useDocumentTypes()
+const router = useRouter()
 
 const { data: document, refresh: refreshDocument } = await useAsyncData(
   `document-${id}`,
@@ -88,17 +92,25 @@ const { data: extractedFields, refresh: refreshExtractedFields } = await useAsyn
 
 const companies = ref<NamedEntity[]>([])
 const categories = ref<NamedEntity[]>([])
-;[companies.value, categories.value] = await Promise.all([fetchCompanies(), fetchCategories()])
+const documentTypes = ref<DocumentTypeEntity[]>([])
+;[companies.value, categories.value, documentTypes.value] = await Promise.all([
+  fetchCompanies(),
+  fetchCategories(),
+  fetchDocumentTypes(),
+])
 
-const editType = ref(document.value?.documentType ?? 'unknown')
+const editTypeId = ref(document.value?.typeId ?? '')
 const editCompanyId = ref(document.value?.companyId ?? '')
 const editCategoryId = ref(document.value?.categoryId ?? '')
 const editDate = ref(document.value?.documentDate?.slice(0, 10) ?? '')
 const tagsInput = ref(document.value?.tags.map(t => t.name).join(', ') ?? '')
 const newCompanyName = ref('')
 const newCategoryName = ref('')
+const newTypeName = ref('')
+const newTypeColor = ref('#2563eb')
 const saving = ref(false)
 const saveMessage = ref('')
+const deleting = ref(false)
 
 const inProgress = computed(() =>
   document.value
@@ -144,6 +156,17 @@ async function addCategory() {
   newCategoryName.value = ''
 }
 
+async function addType() {
+  const name = newTypeName.value.trim()
+  if (!name) return
+  const type = await createDocumentType(name, newTypeColor.value)
+  const existingIndex = documentTypes.value.findIndex(t => t.id === type.id)
+  if (existingIndex === -1) documentTypes.value.push(type)
+  else documentTypes.value[existingIndex] = type
+  editTypeId.value = type.id
+  newTypeName.value = ''
+}
+
 async function save() {
   saving.value = true
   saveMessage.value = ''
@@ -151,7 +174,7 @@ async function save() {
     await requestFetch(`/api/documents/${id}`, {
       method: 'PATCH',
       body: {
-        documentType: editType.value,
+        typeId: editTypeId.value || null,
         companyId: editCompanyId.value || null,
         categoryId: editCategoryId.value || null,
         documentDate: editDate.value || null,
@@ -175,6 +198,21 @@ async function toggleReviewed() {
   const next = document.value.reviewStatus === 'approved' ? 'pending' : 'approved'
   await requestFetch(`/api/documents/${id}`, { method: 'PATCH', body: { reviewStatus: next } })
   await refreshDocument()
+}
+
+async function deleteDoc() {
+  if (!document.value) return
+  if (!confirm(`Delete "${document.value.originalFilename}"? This removes the original file and cannot be undone.`)) {
+    return
+  }
+  deleting.value = true
+  try {
+    await requestFetch(`/api/documents/${id}`, { method: 'DELETE' })
+    await router.push('/')
+  }
+  finally {
+    deleting.value = false
+  }
 }
 
 const relationSearch = ref('')
@@ -287,6 +325,7 @@ function couponPrefillLink(field: ExtractedField) {
     <h1>{{ document.originalFilename }}</h1>
 
     <div class="meta">
+      <TypeBadge :name="document.typeName" :color="document.typeColor" />
       <span class="badge">{{ document.processingStatus }}</span>
       <span>{{ document.mimeType }}</span>
       <span>Uploaded {{ formatDate(document.uploadedAt) }}</span>
@@ -300,16 +339,34 @@ function couponPrefillLink(field: ExtractedField) {
       <button type="button" class="link-button" @click="toggleReviewed">
         {{ document.reviewStatus === 'approved' ? 'Move back to inbox' : 'Mark reviewed' }}
       </button>
+      <button type="button" class="link-button danger" :disabled="deleting" @click="deleteDoc">
+        {{ deleting ? 'Deleting…' : 'Delete document' }}
+      </button>
     </div>
 
     <form class="edit-panel" @submit.prevent="save">
       <div class="field">
         <label for="type">Type</label>
-        <select id="type" v-model="editType">
-          <option v-for="type in documentTypeValues" :key="type" :value="type">
-            {{ type }}
+        <select id="type" v-model="editTypeId">
+          <option value="">
+            None
+          </option>
+          <option v-for="type in documentTypes" :key="type.id" :value="type.id">
+            {{ type.name }}
           </option>
         </select>
+        <div class="inline-create">
+          <input v-model="newTypeName" placeholder="New type…" @keyup.enter.prevent="addType">
+          <input v-model="newTypeColor" type="color" class="color-input" title="Type color">
+          <button type="button" @click="addType">
+            Add
+          </button>
+        </div>
+        <p class="manage-link">
+          <NuxtLink to="/document-types">
+            Manage types
+          </NuxtLink>
+        </p>
       </div>
 
       <div class="field">
@@ -503,6 +560,11 @@ h1 {
   text-decoration: underline;
 }
 
+.link-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .edit-panel {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -541,6 +603,17 @@ h1 {
 .inline-create input {
   flex: 1;
   min-width: 0;
+}
+
+.inline-create .color-input {
+  flex: none;
+  width: 2.5rem;
+  padding: 0.1rem;
+}
+
+.manage-link {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
 }
 
 .actions {

@@ -69,7 +69,7 @@ for the architectural conventions this codebase follows.
 ## Project layout
 
 ```text
-app/            Nuxt app: pages, layouts, components, composables
+app/            Nuxt app: pages, layouts, components (e.g. TypeBadge), composables
 server/
   api/          Nitro API routes
   services/
@@ -126,5 +126,16 @@ tests/          Vitest tests
   written into a document/receipt/coupon automatically; the document
   detail page's "Extracted fields" panel has quick-apply buttons (date,
   company) and prefill links into the Receipts/Coupons create forms.
+- **Document types made user-managed, plus document delete**: document
+  type is no longer a fixed enum — `document_types` is a table like
+  companies/categories, each with a user-set hex color, manageable at
+  `/document-types` or inline from the document edit form. Documents
+  show their type as a colored badge (`TypeBadge.vue`, text color picked
+  automatically for contrast) everywhere a type appears. The old enum
+  values were migrated into seeded rows and backfilled onto existing
+  documents in a two-step migration (Postgres enum-to-FK conversions
+  can't safely happen in one step). Documents can now be deleted (original
+  file + previews removed from storage; receipts/warranties/coupons/
+  expenses that reference the document keep existing, just unlinked).
 
 AI classification/extraction land in later phases per `roadmap.md`.

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, normalize } from 'node:path'
 import { existsSync } from 'node:fs'
 import type { DocumentStorage } from './types'
@@ -25,6 +25,9 @@ export function createFilesystemStorage(baseDir: string): DocumentStorage {
     },
     async exists(key) {
       return existsSync(resolveKey(key))
+    },
+    async delete(key) {
+      await rm(resolveKey(key), { force: true })
     },
   }
 }

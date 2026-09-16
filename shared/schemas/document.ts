@@ -1,19 +1,6 @@
 import { z } from 'zod'
 import { isoDateSchema } from './common'
 
-export const documentTypeValues = [
-  'unknown',
-  'letter',
-  'invoice',
-  'receipt',
-  'contract',
-  'insurance_document',
-  'coupon',
-  'other',
-] as const
-
-export const documentTypeSchema = z.enum(documentTypeValues)
-
 export const processingStatusValues = [
   'UPLOADED',
   'VALIDATED',
@@ -50,7 +37,7 @@ export const documentListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
   offset: z.coerce.number().int().min(0).default(0),
   q: z.string().trim().min(1).max(200).optional(),
-  documentType: documentTypeSchema.optional(),
+  typeId: z.uuid().optional(),
   reviewStatus: reviewStatusSchema.optional(),
   companyId: z.uuid().optional(),
   categoryId: z.uuid().optional(),
@@ -58,7 +45,7 @@ export const documentListQuerySchema = z.object({
 })
 
 export const updateDocumentSchema = z.object({
-  documentType: documentTypeSchema.optional(),
+  typeId: z.uuid().nullable().optional(),
   companyId: z.uuid().nullable().optional(),
   categoryId: z.uuid().nullable().optional(),
   documentDate: isoDateSchema.nullable().optional(),
