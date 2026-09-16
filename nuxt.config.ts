@@ -12,6 +12,7 @@ export default defineNuxtConfig({
     authUsername: '',
     authPasswordHash: '',
     logFormat: 'pretty',
+    storageDir: './data/documents',
   },
 
   nitro: {

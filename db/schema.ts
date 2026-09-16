@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { index, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { bigint, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import {
   documentTypeValues,
   processingStatusValues,
@@ -18,6 +18,7 @@ export const documents = pgTable(
     mimeType: text('mime_type').notNull(),
     storageKey: text('storage_key').notNull(),
     sha256: text('sha256').notNull(),
+    fileSizeBytes: bigint('file_size_bytes', { mode: 'number' }).notNull(),
     uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
     documentDate: timestamp('document_date', { withTimezone: true, mode: 'date' }),
     documentType: documentTypeEnum('document_type').notNull().default('unknown'),
@@ -32,5 +33,5 @@ export const documents = pgTable(
       .defaultNow()
       .$onUpdate(() => sql`now()`),
   },
-  (table) => [index('documents_sha256_idx').on(table.sha256)],
+  (table) => [uniqueIndex('documents_sha256_idx').on(table.sha256)],
 )

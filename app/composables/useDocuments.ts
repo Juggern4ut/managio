@@ -1,0 +1,64 @@
+export interface DocumentSummary {
+  id: string
+  originalFilename: string
+  mimeType: string
+  fileSizeBytes: number
+  documentType: string
+  processingStatus: string
+  reviewStatus: string
+  uploadedAt: string
+}
+
+export interface DocumentListResponse {
+  items: DocumentSummary[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export type UploadOutcome
+  = | { status: 'uploaded', documentId: string, processingStatus: string }
+    | { status: 'duplicate', documentId: string }
+    | { status: 'error', message: string }
+
+export function useDocuments() {
+  // Plain global `$fetch` does not forward the session cookie during SSR.
+  // useRequestFetch() returns an isomorphic fetch that does (and behaves
+  // like normal $fetch on the client), so the authenticated /api/documents
+  // calls below work on both the initial server render and later on the client.
+  const requestFetch = useRequestFetch()
+  const list = useState<DocumentListResponse | null>('documents-list', () => null)
+  const loading = ref(false)
+
+  async function refresh() {
+    loading.value = true
+    try {
+      list.value = await requestFetch<DocumentListResponse>('/api/documents', {
+        query: { limit: 50, offset: 0 },
+      })
+    }
+    finally {
+      loading.value = false
+    }
+  }
+
+  async function upload(file: File): Promise<UploadOutcome> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      return await requestFetch<Exclude<UploadOutcome, { status: 'error' }>>('/api/documents', {
+        method: 'POST',
+        body: formData,
+      })
+    }
+    catch (error) {
+      const message
+        = (error as { data?: { statusMessage?: string } })?.data?.statusMessage
+          ?? 'Upload failed.'
+      return { status: 'error', message }
+    }
+  }
+
+  return { list, loading, refresh, upload }
+}
