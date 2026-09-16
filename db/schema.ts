@@ -1,9 +1,14 @@
 import { sql } from 'drizzle-orm'
 import {
   bigint,
+  boolean,
+  check,
   customType,
+  date,
   foreignKey,
   index,
+  integer,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -19,12 +24,16 @@ import {
   reviewStatusValues,
   stageStatusValues,
 } from '../shared/schemas/document'
+import { discountTypeValues } from '../shared/schemas/coupon'
+import { relationTypeValues } from '../shared/schemas/relation'
 
 export const documentTypeEnum = pgEnum('document_type', documentTypeValues)
 export const processingStatusEnum = pgEnum('processing_status', processingStatusValues)
 export const reviewStatusEnum = pgEnum('review_status', reviewStatusValues)
 export const processingStageEnum = pgEnum('processing_stage', processingStageValues)
 export const stageStatusEnum = pgEnum('stage_status', stageStatusValues)
+export const discountTypeEnum = pgEnum('discount_type', discountTypeValues)
+export const relationTypeEnum = pgEnum('relation_type', relationTypeValues)
 
 // Postgres full-text search vector. No dedicated Drizzle column type exists
 // for this, hence the customType.
@@ -166,6 +175,194 @@ export const documentProcessingEvents = pgTable(
       columns: [table.documentId],
       foreignColumns: [documents.id],
       name: 'document_processing_events_document_id_fk',
+    }).onDelete('cascade'),
+  ],
+)
+
+export const products = pgTable('products', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  serialNumber: text('serial_number'),
+  modelNumber: text('model_number'),
+  manufacturer: text('manufacturer'),
+  purchaseDate: date('purchase_date', { mode: 'date' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const receipts = pgTable(
+  'receipts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentId: uuid('document_id'),
+    merchantCompanyId: uuid('merchant_company_id'),
+    purchaseDate: date('purchase_date', { mode: 'date' }).notNull(),
+    totalMinorUnits: integer('total_minor_units').notNull(),
+    currency: text('currency').notNull(),
+    taxMinorUnits: integer('tax_minor_units'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  table => [
+    foreignKey({
+      columns: [table.documentId],
+      foreignColumns: [documents.id],
+      name: 'receipts_document_id_fk',
+    }).onDelete('set null'),
+    foreignKey({
+      columns: [table.merchantCompanyId],
+      foreignColumns: [companies.id],
+      name: 'receipts_merchant_company_id_fk',
+    }).onDelete('set null'),
+  ],
+)
+
+export const receiptItems = pgTable(
+  'receipt_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    receiptId: uuid('receipt_id').notNull(),
+    description: text('description').notNull(),
+    quantity: numeric('quantity', { precision: 10, scale: 3, mode: 'number' }).notNull().default(1),
+    unitPriceMinorUnits: integer('unit_price_minor_units').notNull(),
+    totalMinorUnits: integer('total_minor_units').notNull(),
+    productId: uuid('product_id'),
+  },
+  table => [
+    index('receipt_items_receipt_id_idx').on(table.receiptId),
+    foreignKey({
+      columns: [table.receiptId],
+      foreignColumns: [receipts.id],
+      name: 'receipt_items_receipt_id_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.productId],
+      foreignColumns: [products.id],
+      name: 'receipt_items_product_id_fk',
+    }).onDelete('set null'),
+  ],
+)
+
+export const warranties = pgTable(
+  'warranties',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    productId: uuid('product_id').notNull(),
+    sourceDocumentId: uuid('source_document_id'),
+    startsOn: date('starts_on', { mode: 'date' }).notNull(),
+    endsOn: date('ends_on', { mode: 'date' }).notNull(),
+    warrantyType: text('warranty_type'),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  table => [
+    index('warranties_product_id_idx').on(table.productId),
+    foreignKey({
+      columns: [table.productId],
+      foreignColumns: [products.id],
+      name: 'warranties_product_id_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.sourceDocumentId],
+      foreignColumns: [documents.id],
+      name: 'warranties_source_document_id_fk',
+    }).onDelete('set null'),
+  ],
+)
+
+export const coupons = pgTable(
+  'coupons',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceDocumentId: uuid('source_document_id'),
+    issuerCompanyId: uuid('issuer_company_id'),
+    code: text('code'),
+    discountType: discountTypeEnum('discount_type').notNull(),
+    // Whole number 0-100 for 'percentage', minor units in `currency` for
+    // 'fixed_amount', unused (0) for 'other'.
+    discountValue: integer('discount_value').notNull(),
+    currency: text('currency'),
+    validFrom: date('valid_from', { mode: 'date' }),
+    expiresOn: date('expires_on', { mode: 'date' }),
+    minimumPurchaseMinorUnits: integer('minimum_purchase_minor_units'),
+    conditions: text('conditions'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  table => [
+    foreignKey({
+      columns: [table.sourceDocumentId],
+      foreignColumns: [documents.id],
+      name: 'coupons_source_document_id_fk',
+    }).onDelete('set null'),
+    foreignKey({
+      columns: [table.issuerCompanyId],
+      foreignColumns: [companies.id],
+      name: 'coupons_issuer_company_id_fk',
+    }).onDelete('set null'),
+  ],
+)
+
+export const expenses = pgTable(
+  'expenses',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    receiptId: uuid('receipt_id'),
+    documentId: uuid('document_id'),
+    categoryId: uuid('category_id'),
+    amountMinorUnits: integer('amount_minor_units').notNull(),
+    currency: text('currency').notNull(),
+    expenseDate: date('expense_date', { mode: 'date' }).notNull(),
+    description: text('description'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  table => [
+    foreignKey({
+      columns: [table.receiptId],
+      foreignColumns: [receipts.id],
+      name: 'expenses_receipt_id_fk',
+    }).onDelete('set null'),
+    foreignKey({
+      columns: [table.documentId],
+      foreignColumns: [documents.id],
+      name: 'expenses_document_id_fk',
+    }).onDelete('set null'),
+    foreignKey({
+      columns: [table.categoryId],
+      foreignColumns: [categories.id],
+      name: 'expenses_category_id_fk',
+    }).onDelete('set null'),
+  ],
+)
+
+export const documentRelations = pgTable(
+  'document_relations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceDocumentId: uuid('source_document_id').notNull(),
+    targetDocumentId: uuid('target_document_id').notNull(),
+    relationType: relationTypeEnum('relation_type').notNull(),
+    // Null confidence + confirmedByUser=true: every relation created so far
+    // is a direct manual link, not an AI proposal (that lands in a later
+    // phase and will populate confidence instead).
+    confidence: numeric('confidence', { precision: 3, scale: 2, mode: 'number' }),
+    confirmedByUser: boolean('confirmed_by_user').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  table => [
+    uniqueIndex('document_relations_unique_idx').on(
+      table.sourceDocumentId,
+      table.targetDocumentId,
+      table.relationType,
+    ),
+    index('document_relations_target_document_id_idx').on(table.targetDocumentId),
+    check('document_relations_no_self_reference', sql`${table.sourceDocumentId} <> ${table.targetDocumentId}`),
+    foreignKey({
+      columns: [table.sourceDocumentId],
+      foreignColumns: [documents.id],
+      name: 'document_relations_source_document_id_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.targetDocumentId],
+      foreignColumns: [documents.id],
+      name: 'document_relations_target_document_id_fk',
     }).onDelete('cascade'),
   ],
 )

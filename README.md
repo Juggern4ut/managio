@@ -105,6 +105,13 @@ tests/          Vitest tests
   content), manual document type/company/category/tags, and an Inbox that
   now shows only documents still needing review — everything else lives on
   the searchable/filterable Documents page.
+- **Phase 5** — core domain model: products, receipts (with line items),
+  warranties, coupons, expenses, and document-to-document relations —
+  manual entry for now (deterministic/AI extraction lands in later
+  phases). Money is always integer minor units + a currency code, never
+  floating point. Reachable from the nav bar; the document detail page
+  gained a "Related documents" section for linking documents to each other
+  (`related_to`, `duplicate_of`, `part_of_case`, `supports_purchase`,
+  `proves_warranty`).
 
-AI classification/extraction and the rest of the domain model land in later
-phases per `roadmap.md`.
+AI classification/extraction land in later phases per `roadmap.md`.

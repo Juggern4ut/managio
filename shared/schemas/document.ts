@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isoDateSchema } from './common'
 
 export const documentTypeValues = [
   'unknown',
@@ -44,8 +45,6 @@ export const processingStageSchema = z.enum(processingStageValues)
 export const stageStatusValues = ['started', 'succeeded', 'failed'] as const
 
 export const stageStatusSchema = z.enum(stageStatusValues)
-
-const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
 
 export const documentListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),

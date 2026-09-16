@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { documentTypeValues } from '#shared/schemas/document'
+import { relationTypeValues } from '#shared/schemas/relation'
 import type { NamedEntity } from '~/composables/useOrganize'
 
 const route = useRoute()
@@ -36,6 +37,19 @@ interface ProcessingEvent {
   errorMessage: string | null
 }
 
+interface DocumentRelation {
+  id: string
+  relationType: string
+  direction: 'incoming' | 'outgoing'
+  createdAt: string
+  document: { id: string, originalFilename: string, documentType: string } | null
+}
+
+interface DocumentSearchResult {
+  id: string
+  originalFilename: string
+}
+
 const requestFetch = useRequestFetch()
 const { fetchCompanies, createCompany, fetchCategories, createCategory } = useOrganize()
 
@@ -47,6 +61,11 @@ const { data: document, refresh: refreshDocument } = await useAsyncData(
 const { data: events, refresh: refreshEvents } = await useAsyncData(
   `document-events-${id}`,
   () => requestFetch<{ items: ProcessingEvent[] }>(`/api/documents/${id}/events`),
+)
+
+const { data: relations, refresh: refreshRelations } = await useAsyncData(
+  `document-relations-${id}`,
+  () => requestFetch<{ items: DocumentRelation[] }>(`/api/documents/${id}/relations`),
 )
 
 const companies = ref<NamedEntity[]>([])
@@ -84,7 +103,10 @@ onMounted(() => {
   }, 2000)
 })
 
-onUnmounted(stopPolling)
+onUnmounted(() => {
+  stopPolling()
+  clearTimeout(relationSearchTimer)
+})
 
 async function addCompany() {
   const name = newCompanyName.value.trim()
@@ -135,6 +157,57 @@ async function toggleReviewed() {
   const next = document.value.reviewStatus === 'approved' ? 'pending' : 'approved'
   await requestFetch(`/api/documents/${id}`, { method: 'PATCH', body: { reviewStatus: next } })
   await refreshDocument()
+}
+
+const relationSearch = ref('')
+const relationResults = ref<DocumentSearchResult[]>([])
+const relationTarget = ref<DocumentSearchResult | null>(null)
+const relationType = ref<typeof relationTypeValues[number]>('related_to')
+const relationError = ref('')
+let relationSearchTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(relationSearch, (value) => {
+  relationTarget.value = null
+  clearTimeout(relationSearchTimer)
+  if (!value.trim()) {
+    relationResults.value = []
+    return
+  }
+  relationSearchTimer = setTimeout(async () => {
+    const { items } = await requestFetch<{ items: DocumentSearchResult[] }>('/api/documents', {
+      query: { q: value, limit: 5 },
+    })
+    relationResults.value = items.filter(item => item.id !== id)
+  }, 300)
+})
+
+function pickRelationTarget(result: DocumentSearchResult) {
+  relationTarget.value = result
+  relationSearch.value = result.originalFilename
+  relationResults.value = []
+}
+
+async function addRelation() {
+  if (!relationTarget.value) return
+  relationError.value = ''
+  try {
+    await requestFetch(`/api/documents/${id}/relations`, {
+      method: 'POST',
+      body: { targetDocumentId: relationTarget.value.id, relationType: relationType.value },
+    })
+    relationSearch.value = ''
+    relationTarget.value = null
+    await refreshRelations()
+  }
+  catch (error) {
+    relationError.value
+      = (error as { data?: { statusMessage?: string } })?.data?.statusMessage ?? 'Failed to link document.'
+  }
+}
+
+async function removeRelation(relationId: string) {
+  await requestFetch(`/api/document-relations/${relationId}`, { method: 'DELETE' })
+  await refreshRelations()
 }
 
 function formatDate(iso: string | null): string {
@@ -260,6 +333,45 @@ function formatDate(iso: string | null): string {
     </ul>
     <p v-else class="hint">
       No processing events yet.
+    </p>
+
+    <h2>Related documents</h2>
+    <ul v-if="relations?.items.length" class="relations">
+      <li v-for="relation in relations.items" :key="relation.id">
+        <span class="direction">{{ relation.direction === 'outgoing' ? '→' : '←' }}</span>
+        <span class="badge">{{ relation.relationType }}</span>
+        <NuxtLink v-if="relation.document" :to="`/documents/${relation.document.id}`">
+          {{ relation.document.originalFilename }}
+        </NuxtLink>
+        <button type="button" class="link-button danger" @click="removeRelation(relation.id)">
+          Unlink
+        </button>
+      </li>
+    </ul>
+    <p v-else class="hint">
+      No related documents yet.
+    </p>
+
+    <form class="relation-form" @submit.prevent="addRelation">
+      <div class="search-box">
+        <input v-model="relationSearch" placeholder="Search a document to link…">
+        <ul v-if="relationResults.length" class="results">
+          <li v-for="result in relationResults" :key="result.id" @click="pickRelationTarget(result)">
+            {{ result.originalFilename }}
+          </li>
+        </ul>
+      </div>
+      <select v-model="relationType">
+        <option v-for="type in relationTypeValues" :key="type" :value="type">
+          {{ type }}
+        </option>
+      </select>
+      <button type="submit" :disabled="!relationTarget">
+        Link
+      </button>
+    </form>
+    <p v-if="relationError" class="error">
+      {{ relationError }}
     </p>
   </div>
 </template>
@@ -419,5 +531,98 @@ h1 {
 
 .events .error {
   color: #c0392b;
+}
+
+.relations {
+  list-style: none;
+  padding: 0;
+  margin-bottom: 1rem;
+}
+
+.relations li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.875rem;
+}
+
+.direction {
+  color: #9ca3af;
+}
+
+.link-button.danger {
+  color: #c0392b;
+  margin-left: auto;
+}
+
+.relation-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.search-box {
+  position: relative;
+  flex: 1;
+  min-width: 220px;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  box-sizing: border-box;
+}
+
+.results {
+  position: absolute;
+  z-index: 10;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.results li {
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.results li:hover {
+  background: #f3f4f6;
+}
+
+.relation-form select {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.relation-form button[type='submit'] {
+  padding: 0.45rem 1rem;
+  background: #1f6feb;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.relation-form button[type='submit']:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 </style>

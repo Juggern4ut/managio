@@ -7,8 +7,6 @@ import { useDocumentStorage } from '../../services/storage'
 import { enqueueDocumentProcessing } from '../../services/jobs/queue'
 import { MAX_UPLOAD_BYTES } from '../../../shared/schemas/upload'
 
-const POSTGRES_UNIQUE_VIOLATION = '23505'
-
 async function findDuplicateBySha256(db: ReturnType<typeof useDb>, sha256: string) {
   const rows = await db.select({ id: documents.id }).from(documents).where(eq(documents.sha256, sha256)).limit(1)
   return rows[0]
@@ -106,7 +104,7 @@ export default defineEventHandler(async (event) => {
   catch (error) {
     // Two concurrent uploads of the same file can both pass the pre-check
     // above; the unique index on sha256 is the real duplicate guard.
-    if (isUniqueViolation(error)) {
+    if (pgErrorCode(error) === PG_UNIQUE_VIOLATION) {
       const duplicate = await findDuplicateBySha256(db, sha256)
       if (duplicate) {
         logger.info('Duplicate upload detected (race)', { documentId: duplicate.id })
@@ -116,12 +114,3 @@ export default defineEventHandler(async (event) => {
     throw error
   }
 })
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && (error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION
-  )
-}

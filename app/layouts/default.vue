@@ -19,8 +19,20 @@ async function logout() {
         <NuxtLink to="/documents">
           Documents
         </NuxtLink>
-        <NuxtLink to="/search">
-          Search
+        <NuxtLink to="/receipts">
+          Receipts
+        </NuxtLink>
+        <NuxtLink to="/products">
+          Products
+        </NuxtLink>
+        <NuxtLink to="/warranties">
+          Warranties
+        </NuxtLink>
+        <NuxtLink to="/coupons">
+          Coupons
+        </NuxtLink>
+        <NuxtLink to="/expenses">
+          Expenses
         </NuxtLink>
       </nav>
       <div class="account">
@@ -60,6 +72,7 @@ nav {
   display: flex;
   gap: 1rem;
   flex: 1;
+  flex-wrap: wrap;
 }
 
 nav a {
