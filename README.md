@@ -51,6 +51,71 @@ for the architectural conventions this codebase follows.
 
 3. Visit http://localhost:3000 and sign in with the admin user from `.env`.
 
+## Deploying (Dokploy, two-Application model)
+
+`docker-compose.yml`/`Dockerfile.dev`/`Dockerfile.worker` are dev-only
+(bind-mounted source, watch mode). Production uses two separate images
+built from this same repo, plus Dokploy's managed databases — mirroring
+the usual "one service per part" habit even though app and worker share
+one codebase:
+
+| Dokploy resource | From this repo? | Notes |
+| --- | --- | --- |
+| **Database → PostgreSQL 16** | No (Dokploy-managed) | Gives you backups/volumes for free |
+| **Database → Redis 7** | No (Dokploy-managed) | |
+| **Application → `managio-app`** | Yes, `Dockerfile` | Public domain, port 3000 |
+| **Application → `managio-worker`** | Yes, `Dockerfile.worker.prod` | No public port |
+
+**Shared volume**: the app and worker both read/write the same document
+files (uploads land via the app; previews/OCR output land via the
+worker). Create one Dokploy volume (e.g. `managio_documents`) and mount
+it at the same container path — matching `STORAGE_DIR` below — on
+**both** Applications. This only works if both land on the same node;
+Dokploy's default single-node setup is fine, a multi-node Swarm cluster
+is not without shared/NFS storage.
+
+**Migrations**: `managio-app`'s container command runs
+`npm run db:migrate` before starting the server, every boot — idempotent,
+so safe on every redeploy. The worker doesn't run migrations, to avoid
+both containers racing on the same deploy; deploy/redeploy the app first
+if you've just changed the schema.
+
+### Env vars — `managio-app`
+
+| Variable | Example | Notes |
+| --- | --- | --- |
+| `DATABASE_URL` | `postgresql://user:pass@<pg-host>:5432/managio` | From the Dokploy Postgres service |
+| `REDIS_URL` | `redis://<redis-host>:6379` | From the Dokploy Redis service |
+| `STORAGE_DIR` | `/app/data/documents` | Inside the shared volume mount |
+| `NUXT_SESSION_PASSWORD` | `openssl rand -hex 32` | 32+ random chars |
+| `NUXT_AUTH_USERNAME` | `admin` | |
+| `NUXT_AUTH_PASSWORD_HASH` | *(see below)* | |
+| `NUXT_LOG_FORMAT` | `json` | Structured logs in production |
+
+### Env vars — `managio-worker`
+
+| Variable | Notes |
+| --- | --- |
+| `DATABASE_URL` | Same value as the app |
+| `REDIS_URL` | Same value as the app |
+| `STORAGE_DIR` | Same value **and same mount path** as the app |
+| `OCR_LANGUAGES` | e.g. `eng+deu+fra+ita` |
+| `LOG_FORMAT` | `json` — note: no `NUXT_` prefix here, the worker isn't a Nuxt process |
+
+Generate `NUXT_AUTH_PASSWORD_HASH` locally with `npm run auth:hash -- "your-password"`
+and paste the printed hash as-is. It contains literal `$` characters
+(scrypt's format) — we hit real bugs from this exact character with Docker
+Compose's env-file variable interpolation during local dev (see git history
+if curious). Dokploy's Applications are plain Docker Swarm services, not
+`docker compose`, so this should pass through unescaped — confirmed
+locally by running the built images directly with `docker run -e`. Still,
+**verify by logging in right after your first deploy**; if it fails with
+valid credentials, that escaping issue is the first thing to suspect.
+
+Health check: point Dokploy at `GET /api/health` on `managio-app` (returns
+200 with `{"status":"ok"}` once the database is reachable). The worker has
+no HTTP server — leave it on plain process-alive monitoring.
+
 ## Scripts
 
 | Command | Purpose |

@@ -1,0 +1,30 @@
+# Production image for the `managio-worker` service (BullMQ consumer:
+# preview generation, OCR, deterministic extraction). Companion to
+# Dockerfile, the app image. See README.md "Deploying" for how the two
+# are wired together.
+#
+# Differs from Dockerfile.worker (used for local `docker compose up`) only
+# in running worker:start instead of the tsx watch-mode worker:dev. Uses
+# `npm install` rather than `npm ci` — see Dockerfile's top comment for why.
+
+FROM node:24-bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ocrmypdf \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    tesseract-ocr-deu \
+    tesseract-ocr-fra \
+    tesseract-ocr-ita \
+    poppler-utils \
+    imagemagick \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+CMD ["npm", "run", "worker:start"]
