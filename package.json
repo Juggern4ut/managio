@@ -1,0 +1,44 @@
+{
+  "name": "managio",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "auth:hash": "tsx scripts/hash-password.ts"
+  },
+  "dependencies": {
+    "consola": "^3.4.2",
+    "drizzle-orm": "^0.45.2",
+    "nuxt": "^4.5.2",
+    "nuxt-auth-utils": "^0.5.30",
+    "pg": "^8.23.0",
+    "vue": "^3.5.42",
+    "vue-router": "^5.3.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.17.0",
+    "@nuxt/test-utils": "^4.3.2",
+    "@types/pg": "^8.23.1",
+    "@vue/test-utils": "^2.5.1",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^10.10.0",
+    "happy-dom": "^20.14.5",
+    "tsx": "^4.23.13",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.1",
+    "vue-tsc": "^3.3.11"
+  }
+}
