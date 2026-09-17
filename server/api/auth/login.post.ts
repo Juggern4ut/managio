@@ -20,7 +20,19 @@ export default defineEventHandler(async (event) => {
   const validPassword = validUsername && (await verifyPassword(passwordHash, body.password))
 
   if (!validUsername || !validPassword) {
-    logger.warn('Login attempt failed', { requestId: event.context.requestId })
+    // Safe to log: lengths and a format check, never the actual secret.
+    // Enough to tell apart "wrong username", "hash didn't decode/parse",
+    // and "hash decoded fine but just doesn't match this password" from
+    // the logs alone, without needing shell access to the container.
+    logger.warn('Login attempt failed', {
+      requestId: event.context.requestId,
+      usernameMatched: validUsername,
+      configuredUsernameLength: username.length,
+      suppliedUsernameLength: body.username.length,
+      hashSource: authPasswordHashBase64.trim() ? 'base64' : authPasswordHash.trim() ? 'raw' : 'none',
+      resolvedHashLength: passwordHash.length,
+      resolvedHashLooksValid: passwordHash.startsWith('$scrypt$'),
+    })
     throw createError({ statusCode: 401, statusMessage: 'Invalid credentials' })
   }
 
