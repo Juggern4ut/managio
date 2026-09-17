@@ -14,6 +14,11 @@ export default defineNuxtConfig({
     redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
     authUsername: '',
     authPasswordHash: '',
+    // Alternative to authPasswordHash for deployment UIs that mangle `$`
+    // (template-substitution syntax, accidental trimming, etc.) — base64
+    // has none of those characters. Takes priority when set. Generate with
+    // `npm run auth:hash`, which prints both forms.
+    authPasswordHashBase64: '',
     logFormat: 'pretty',
   },
 

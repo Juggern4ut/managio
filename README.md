@@ -89,7 +89,7 @@ if you've just changed the schema.
 | `STORAGE_DIR` | `/app/data/documents` | Inside the shared volume mount |
 | `NUXT_SESSION_PASSWORD` | `openssl rand -hex 32` | 32+ random chars |
 | `NUXT_AUTH_USERNAME` | `admin` | |
-| `NUXT_AUTH_PASSWORD_HASH` | *(see below)* | |
+| `NUXT_AUTH_PASSWORD_HASH_BASE64` | *(see below)* | Preferred over `NUXT_AUTH_PASSWORD_HASH` — see below |
 | `NUXT_LOG_FORMAT` | `json` | Structured logs in production |
 
 ### Env vars — `managio-worker`
@@ -102,15 +102,27 @@ if you've just changed the schema.
 | `OCR_LANGUAGES` | e.g. `eng+deu+fra+ita` |
 | `LOG_FORMAT` | `json` — note: no `NUXT_` prefix here, the worker isn't a Nuxt process |
 
-Generate `NUXT_AUTH_PASSWORD_HASH` locally with `npm run auth:hash -- "your-password"`
-and paste the printed hash as-is. It contains literal `$` characters
-(scrypt's format) — we hit real bugs from this exact character with Docker
-Compose's env-file variable interpolation during local dev (see git history
-if curious). Dokploy's Applications are plain Docker Swarm services, not
-`docker compose`, so this should pass through unescaped — confirmed
-locally by running the built images directly with `docker run -e`. Still,
-**verify by logging in right after your first deploy**; if it fails with
-valid credentials, that escaping issue is the first thing to suspect.
+Generate the hash locally with `npm run auth:hash -- "your-password"`, which
+prints three forms. **Use the `NUXT_AUTH_PASSWORD_HASH_BASE64` one for
+Dokploy** and leave `NUXT_AUTH_PASSWORD_HASH` unset — it takes priority when
+both are present. The raw hash contains literal `$` characters (scrypt's
+format), and we've seen a deployment UI's env var field mangle those (its
+own template syntax, or just corrupting the value some other way) and
+produce a 401 that looks identical whether you escape `$` as `$$` or not —
+because the escaping was never the actual problem, the transport was. The
+base64 form has no special characters, so there's nothing left to mangle.
+The app also trims accidental leading/trailing whitespace on both
+`NUXT_AUTH_USERNAME` and the hash, in case your platform's text field adds
+a trailing newline on save.
+
+If login still fails after switching to the base64 form: check that the
+service actually redeployed after you changed the env var (some platforms
+require an explicit redeploy, not just saving the value), and that
+`NUXT_AUTH_USERNAME` is exactly what you typed with no extra whitespace.
+A `401 Invalid credentials` means the app *did* find non-empty values for
+both — a `500 Authentication is not configured` would mean it didn't see
+them at all, which points at the env var not reaching the container rather
+than a mismatched value.
 
 Health check: point Dokploy at `GET /api/health` on `managio-app` (returns
 200 with `{"status":"ok"}` once the database is reachable). The worker has
